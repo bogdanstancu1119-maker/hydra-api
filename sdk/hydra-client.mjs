@@ -1,18 +1,22 @@
 // @hydra/api-client — client Node/browser pentru API-ul public Hydra PSIE.
 // Fără dependențe. Node 18+ sau orice browser modern (fetch global).
 //
-//   import { Hydra } from "./hydra-client.mjs";
+//   import { Hydra, HydraError } from "./hydra-client.mjs";
 //   const hidra = new Hydra();
 //   console.log(await hidra.intreaba("Ce este SDI în PSIE?"));
+//
+// Contract: CONTRACT.md v1. Endpointul e pe base44.app; hidra-smart-core.com e pagina.
 
 const ENDPOINT_IMPLICIT = "https://hidra-smart-core.base44.app/functions/hydraApiLiber";
+const LIMITA_PROMPT = 600;
 
 export class HydraError extends Error {
   constructor(message, status, payload) {
     super(message);
     this.name = "HydraError";
-    this.status = status;
-    this.payload = payload;
+    this.status = status;          // HTTP real (0 = eroare de rețea)
+    this.payload = payload || {};  // corpul brut al serverului
+    this.cod = this.payload.code || null; // codul stabil din contractul v1
   }
 }
 
@@ -53,18 +57,18 @@ export class Hydra {
   /** Întreabă organismul. Întoarce doar răspunsul. */
   async intreaba(prompt) {
     const text = String(prompt || "").trim();
-    if (!text) throw new HydraError("Lipsește promptul", 400, null);
-    if (text.length > 600) throw new HydraError("Prompt maxim 600 caractere", 400, null);
+    if (!text) throw new HydraError("Lipsește promptul", 400, { code: "prompt_missing" });
+    if (text.length > LIMITA_PROMPT) throw new HydraError(`Prompt maxim ${LIMITA_PROMPT} caractere`, 400, { code: "prompt_too_long" });
     const date = await this._post({ prompt: text });
     return date.raspuns;
   }
 
-  /** Răspunsul complet: prompt, răspuns, motor, apeluri_llm_externe, liber. */
+  /** Răspunsul complet: prompt, raspuns, status, metoda, surse, versiune, motor. */
   async intreabaDetaliat(prompt) {
     return this._post({ prompt: String(prompt || "").trim() });
   }
 
-  /** Cere o cheie proprie Hydra, emisă instant de organism. */
+  /** Cere o cheie proprie Hydra, emisă instant de organism (opțională). */
   async cereCheie() {
     const date = await this._post({ action: "cheie" });
     if (!date.api_key) throw new HydraError("Cheie neemisă", 200, date);
