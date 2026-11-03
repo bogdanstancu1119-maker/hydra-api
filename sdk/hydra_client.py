@@ -1,60 +1,84 @@
 """hydra-api-client — client Python pentru API-ul public Hydra PSIE.
 
-    from hydra_client import Hydra
+Fără dependențe: doar biblioteca standard (urllib). Python 3.9+.
+
+    from hydra_client import Hydra, HydraError
     hidra = Hydra()
     print(hidra.intreaba("Ce este SDI în PSIE?"))
 
-Necesită: requests
+Endpoint: https://hidra-smart-core.base44.app/functions/hydraApiLiber
+Contract: CONTRACT.md (v1). Pagina + testerul sunt pe hidra-smart-core.com, nu aici.
 """
 from __future__ import annotations
 
-import requests
+import json
+import urllib.error
+import urllib.request
+from typing import Any, Optional
 
 ENDPOINT_IMPLICIT = "https://hidra-smart-core.base44.app/functions/hydraApiLiber"
+LIMITA_PROMPT = 600
 
 
 class HydraError(RuntimeError):
-    def __init__(self, message: str, status: int = 0, payload: dict | None = None):
+    """Eroare de API: `status` (HTTP), `cod` (stabil, din contract) și `payload` brut."""
+
+    def __init__(self, message: str, status: int = 0, payload: Optional[dict] = None):
         super().__init__(message)
         self.status = status
         self.payload = payload or {}
+        self.cod = self.payload.get("code")
 
 
 class Hydra:
-    def __init__(self, endpoint: str = ENDPOINT_IMPLICIT, cheie: str | None = None, timeout: int = 60):
+    def __init__(self, endpoint: str = ENDPOINT_IMPLICIT, cheie: Optional[str] = None, timeout: int = 60):
         self.endpoint = endpoint
         self.cheie = cheie
         self.timeout = timeout
 
     @property
     def antete(self) -> dict:
-        h = {"Content-Type": "application/json"}
+        h = {"Content-Type": "application/json", "User-Agent": "hydra-api-client-python"}
         if self.cheie:
             h["X-Hydra-API-Key"] = self.cheie
         return h
 
     def _post(self, corp: dict) -> dict:
-        r = requests.post(self.endpoint, json=corp, headers=self.antete, timeout=self.timeout)
-        date = r.json() if r.content else {}
-        if r.status_code != 200:
-            raise HydraError(date.get("error", f"HTTP {r.status_code}"), r.status_code, date)
-        return date
+        cerere = urllib.request.Request(
+            self.endpoint,
+            data=json.dumps(corp).encode("utf-8"),
+            headers=self.antete,
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(cerere, timeout=self.timeout) as r:
+                brut = r.read().decode("utf-8")
+                return json.loads(brut) if brut else {}
+        except urllib.error.HTTPError as e:
+            brut = e.read().decode("utf-8", "replace")
+            try:
+                date: Any = json.loads(brut) if brut else {}
+            except json.JSONDecodeError:
+                date = {"brut": brut[:300]}
+            raise HydraError(date.get("error", f"HTTP {e.code}"), e.code, date) from None
+        except urllib.error.URLError as e:
+            raise HydraError(f"rețea: {e.reason}", 0, {}) from None
 
     def intreaba(self, prompt: str) -> str:
-        """Întreabă organismul. Întoarce doar răspunsul."""
+        """Întreabă organismul. Întoarce doar textul răspunsului."""
         text = (prompt or "").strip()
         if not text:
-            raise HydraError("Lipsește promptul", 400)
-        if len(text) > 600:
-            raise HydraError("Prompt maxim 600 caractere", 400)
+            raise HydraError("Lipsește promptul", 400, {"code": "prompt_missing"})
+        if len(text) > LIMITA_PROMPT:
+            raise HydraError(f"Prompt maxim {LIMITA_PROMPT} caractere", 400, {"code": "prompt_too_long"})
         return self._post({"prompt": text})["raspuns"]
 
     def intreaba_detaliat(self, prompt: str) -> dict:
-        """Răspunsul complet: prompt, răspuns, motor, apeluri_llm_externe, liber."""
+        """Răspunsul complet: raspuns, status, metoda, surse, versiune, motor."""
         return self._post({"prompt": (prompt or "").strip()})
 
     def cere_cheie(self) -> str:
-        """Cere o cheie proprie Hydra, emisă instant de organism."""
+        """Cere o cheie proprie Hydra, emisă instant de organism (opțională)."""
         date = self._post({"action": "cheie"})
         if not date.get("api_key"):
             raise HydraError("Cheie neemisă", 200, date)
@@ -63,4 +87,7 @@ class Hydra:
 
 
 if __name__ == "__main__":
-    print(Hydra().intreaba("Ce este SDI în PSIE?"))
+    try:
+        print(Hydra().intreaba("Ce este SDI în PSIE?"))
+    except HydraError as e:
+        print(f"eroare {e.status} {e.cod or ''}: {e}")
