@@ -4,26 +4,49 @@ Hydra PSIE is an autonomous, deterministic organism. Its public API answers from
 internal knowledge only: **zero external LLM calls, zero partner credentials**.
 Knowledge that is missing is declared as missing, never invented.
 
-- **Endpoint:** `https://hidra-smart-core.base44.app/functions/hydraApiLiber`
+- **Endpoint (this is the API):** `https://hidra-smart-core.base44.app/functions/hydraApiLiber`
+- **Platform page + browser tester (not the API host):** https://hidra-smart-core.com/api
 - **Method:** `POST` with `Content-Type: application/json`
-- **Auth:** none required. A Hydra key is optional (header `X-Hydra-API-Key`).
+- **Auth:** none required. A Hydra key is optional and changes nothing functional today.
 - **CORS:** `Access-Control-Allow-Origin: *` — callable from a browser, another origin, or a server.
-- **Prompt limit:** 600 characters.
-- **Docs / live tester:** https://hidra-smart-core.com/api#test
+- **Prompt limit:** 600 characters. **Token/credit quota: none. Rate limit: none (and none declared).**
+
+## Last verified
+
+**2026-11-03, 18:04 UTC**, directly against the live endpoint. Run `node verify.mjs` to
+reproduce it.
+
+| Check | Result |
+| --- | --- |
+| `POST {"prompt": "Ce este SDI in PSIE?"}` | `200`, real answer, `~1.7 s` |
+| `access-control-allow-origin` | `*` |
+| `OPTIONS` | `204`, `POST, OPTIONS`, headers `Content-Type, X-Hydra-API-Key, Authorization` |
+| 700-character prompt | `400` (`prompt_too_long` once the pending build is deployed) |
+| `GET` | `405` |
+| `Authorization: Bearer …` | ignored, answers `200` — use `X-Hydra-API-Key` |
+
+**Known mismatch, stated on purpose:** the build answering right now predates contract
+`v1`, so it returns `raspuns`, `status`, `metoda`, `surse` but **not** `code` and
+`versiune`. The `server/` source here is the saved version
+(`sha256 4a803596617df025e2f5cc0e0cd9f75e678c268df00ee039dbb2af50f85f02f1`) and goes
+live on the next deploy. Until then, branch on `status` / `error` text; after it, branch
+on `code`.
 
 ## Repository layout
 
 ```
-CONTRACT.md              what is guaranteed, and what is still missing
+CONTRACT.md              what is guaranteed, what is verified, and what is still missing
+CHANGELOG.md             dated changes, with observable effect
+verify.mjs               runs the contract checks against the live endpoint (Node 18+)
 examples/                curl, Node, Python — copy, run, done
 sdk/hydra-client.mjs     JS client, no dependencies (Node 18+ / browser)
-sdk/hydra_client.py      Python client (requests)
-server/                  the real server source behind the endpoint
+sdk/hydra_client.py      Python client, no dependencies (stdlib only, Python 3.9+)
+server/                  the server source behind the endpoint (entry handler + direct modules)
 ```
 
 **Read [`CONTRACT.md`](CONTRACT.md) before you build on this.** It states the response
 fields you may rely on, the stable error codes, how keys behave, what happens to your
-prompt after the reply, and the five gaps still open.
+prompt after the reply, what open CORS actually means, and the five gaps still open.
 
 ## 1. Call it (no key)
 
@@ -48,7 +71,24 @@ curl -X POST https://hidra-smart-core.base44.app/functions/hydraApiLiber \
 }
 ```
 
-## 2. Get your own Hydra key (optional, instant)
+An error looks like this (`code` arrives with the contract build; see Last verified):
+
+```json
+{ "error": "Prompt maxim 600 caractere", "code": "prompt_too_long", "versiune": "v1" }
+```
+
+## 2. Two limits, not one
+
+| | Value |
+| --- | --- |
+| Tokens, credits, monthly quota | **none** — nothing is counted |
+| Requests per second / per day | **none** — and none is declared, because none is enforced |
+| Prompt length | **600 characters**, enforced (`400`) |
+| Body `Cache-Control` | `no-store` |
+
+No quota does not mean unlimited safe volume: read §8 of `CONTRACT.md` about abuse.
+
+## 3. Get your own Hydra key (optional, instant)
 
 ```bash
 curl -X POST https://hidra-smart-core.base44.app/functions/hydraApiLiber \
@@ -56,7 +96,7 @@ curl -X POST https://hidra-smart-core.base44.app/functions/hydraApiLiber \
   -d '{"action":"cheie"}'
 ```
 
-The response carries `api_key`. Send it back in the `X-Hydra-API-Key` header:
+The response carries `api_key`. Send it back in `X-Hydra-API-Key`:
 
 ```bash
 curl -X POST https://hidra-smart-core.base44.app/functions/hydraApiLiber \
@@ -65,10 +105,11 @@ curl -X POST https://hidra-smart-core.base44.app/functions/hydraApiLiber \
   -d '{"prompt":"Explică SDI și RMI"}'
 ```
 
-The key is issued by Hydra itself. It is not a credential for any other platform
-and grants no administrative access.
+The key is issued by Hydra itself, never expires, cannot be revoked, identifies nobody,
+and grants no administrative access. The API answers identically without it.
+`Authorization: Bearer …` is **not** read — only `X-Hydra-API-Key` or `"api_key"` in the body.
 
-## Status codes
+## 4. Status codes
 
 Every error carries a stable `code` next to the human-readable `error`. Branch on the
 code, never on the text.
@@ -78,49 +119,94 @@ code, never on the text.
 | `200` | — | Served. |
 | `400` | `prompt_missing` | Missing `prompt`. |
 | `400` | `prompt_too_long` | Longer than 600 characters. |
-| `401` | `invalid_key` | A key was sent and it is not a valid Hydra key. Omit the header if unsure. |
+| `401` | `invalid_key` | A key was sent and it is not a valid Hydra key. Omit the header, or request a new one. |
 | `405` | `method_not_allowed` | Method other than `POST` (or `OPTIONS`). |
-| `409` | `quarantine` | The text entered internal quarantine — its signature was retained as an antibody (`ordine` carries the reason). |
-| `500` | `internal_error` | Internal error. |
+| `409` | `quarantine` | The text entered internal quarantine as a likely attack — its signature was retained as an antibody. It never reaches the engine. `ordine: {motiv, risc, tip, semnaturi}` says why. Resending the same text returns `409` again; rephrase. |
+| `500` | `internal_error` | Internal error. Retry once, then report the prompt and time. |
 
-## 3. Client SDK
+## 5. Run the examples (versions tested)
 
-JavaScript — no dependencies:
+| Artifact | Requires | Tested |
+| --- | --- | --- |
+| `examples/api-curl.sh` | `bash`, `curl` | 2026-11-03 |
+| `examples/api.mjs` | Node **18+** (global `fetch`), zero deps | 2026-11-03, Node 24.22 |
+| `examples/api.py` | Python **3.9+**, standard library only | 2026-11-03, Python 3.11.18 |
+| `sdk/hydra-client.mjs` | Node 18+ / any modern browser, zero deps | 2026-11-03, Node 24.22 |
+| `sdk/hydra_client.py` | Python 3.9+, standard library only | 2026-11-03, Python 3.11.18 |
+| `verify.mjs` | Node 18+, zero deps | 2026-11-03, Node 24.22 |
+
+```bash
+git clone https://github.com/bogdanstancu1119-maker/hydra-api.git
+cd hydra-api
+
+bash examples/api-curl.sh      # curl
+node examples/api.mjs          # Node, no install
+python3 examples/api.py        # Python, no install
+node verify.mjs                # run the contract checks
+```
+
+There is no package to install and no dependency to fetch: `fetch` in Node 18+ and
+`urllib` in Python keep both clients installable-free.
+
+## 6. Client SDK
+
+JavaScript:
 
 ```js
-import { Hydra } from "./sdk/hydra-client.mjs";
+import { Hydra, HydraError } from "./sdk/hydra-client.mjs";
 
 const hidra = new Hydra();               // new Hydra({ cheie: "..." }) if you have a key
 console.log(await hidra.intreaba("Ce este SDI în PSIE?"));
+
+try {
+  await hidra.intreabaDetaliat("…");
+} catch (e) {
+  if (e instanceof HydraError) console.log(e.status, e.cod, e.payload);
+}
 ```
 
-Python — `pip install requests`:
+Python:
 
 ```python
-from hydra_client import Hydra
+from hydra_client import Hydra, HydraError
 
-hidra = Hydra()
+hidra = Hydra()                          # Hydra(cheie="...") if you have a key
 print(hidra.intreaba("Ce este SDI în PSIE?"))
 ```
 
-Both clients expose `intreaba` / `intreabaDetaliat` (full JSON) and `cereCheie`, and
-raise a typed error carrying the HTTP status and the server payload.
+Both expose `intreaba` / `intreabaDetaliat` (full JSON) and `cereCheie` / `cere_cheie`,
+and raise a typed error carrying the HTTP status, the stable `code` and the server payload.
 
-## 4. Server source
+## 7. Server source
 
-`server/` holds the code that actually runs behind the endpoint: CORS and method gate,
-key verification, the immunity queue (quarantine before answering), the deterministic
-answering engine, and the post-reply sensor that turns every call into memory and a
-beacon. See [`server/README.md`](server/README.md) for the exact order of a call.
+`server/` holds the code behind the endpoint: the HTTP handler (`entry.ts`) plus the five
+modules it imports directly — the unitary-pulse gate, the immunity ordering, key issue and
+verification, the deterministic answering engine, and the nervous-system beacon. These
+five import further organism internals that are not published here; the imports are left
+visible on purpose, so nothing about the chain is hidden.
+
+See [`server/README.md`](server/README.md) for the exact order of a call and the source
+hash of the deployed version.
 
 The engine holds no provider credentials and calls no external model — there is no
 secret that would justify hiding the logic.
+
+## 8. What is kept after you call
+
+Stated plainly, because it matters more than the feature list:
+
+- Your full `prompt` is stored as organism experience, together with the first 2000
+  characters of the reply, a timestamp and a truncated user-agent.
+- Recurring calls become an internal pattern (token signature only, not the full text).
+- An internal beacon announces the call to the coordinator.
+- There is **no retention period, no deletion endpoint and no no-store flag yet**.
+- Do not send personal data, secrets or confidential content.
 
 ## Examples
 
 - [`examples/api-curl.sh`](examples/api-curl.sh)
 - [`examples/api.mjs`](examples/api.mjs) — Node 18+, no dependencies
-- [`examples/api.py`](examples/api.py) — Python 3, `requests`
+- [`examples/api.py`](examples/api.py) — Python 3, standard library
 
 ## Principles
 
