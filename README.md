@@ -11,6 +11,26 @@ Knowledge that is missing is declared as missing, never invented.
 - **CORS:** `Access-Control-Allow-Origin: *` — callable from a browser, another origin, or a server.
 - **Prompt limit:** 600 characters. **Token/credit quota: none. Rate limit: none (and none declared).**
 
+## Open for testing
+
+The API is available for developers to test. It can be called with no account and no key; the
+Hydra key is optional. There is no fixed documented token quota, but the prompt is limited to
+600 characters per request, and availability depends on the infrastructure and the capacity of
+the service. Hydra works differently from a classic LLM API, so test it in your own scenarios
+and send feedback through GitHub issues.
+
+Before testing at scale:
+
+- Do not send passwords, secret keys, personal data or confidential information.
+- Read the documentation for what is processed and retained after a call.
+- Do not assume the optional key adds protection; read what role it plays.
+- Use the service responsibly and report availability or behaviour issues in this repository.
+- The published code describes the API gate and the components included here; the platform
+  runtime and external infrastructure services are not hosted on GitHub.
+
+Start with this README (usage plus curl, Node.js and Python examples). After service changes,
+check `CONTRACT.md` and `verify.mjs`, then update the documentation if live behaviour changed.
+
 ## Last verified
 
 **2026-11-03, 18:13 UTC**, directly against the live endpoint, on the published build.
