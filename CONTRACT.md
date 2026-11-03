@@ -8,24 +8,18 @@ Endpoint: `POST https://hidra-smart-core.base44.app/functions/hydraApiLiber`
 
 ## 0. Stare verificată
 
-- **Ultima verificare: 2026-11-03, 18:04 UTC** (13:04 în America/Cayenne), rulată
-  direct pe endpoint-ul public, nu pe o copie locală.
-- **Ce a trecut atunci:** `200` cu răspuns real, `access-control-allow-origin: *`,
-  `OPTIONS` → `204` cu `POST, OPTIONS` și antetele permise, limita de 600 de caractere
-  → `400`, `GET` → `405`, latență ~1,7 s pentru un prompt scurt.
-- **Ce nu corespunde încă:** buildul care răspunde acum **nu întoarce `code` și `versiune`**,
-  deci rulează versiunea dinaintea contractului v1. Sursa din `server/` este versiunea
-  salvată (`sha256 4a803596617df025e2f5cc0e0cd9f75e678c268df00ee039dbb2af50f85f02f1`),
-  care intră în producție la următorul deploy. Câmpurile `raspuns`, `status`, `metoda`,
-  `surse` sunt deja prezente live; `code` și `versiune` apar după deploy.
+- **Ultima verificare: 2026-11-03, 18:13 UTC** (15:13 în America/Cayenne), rulată direct
+  pe endpoint-ul public, nu pe o copie locală, imediat după deploy.
+- **Rezultat: 9/9 puncte trec.** Buildul publicat este versiunea contractului v1
+  (sursa din `server/`, `sha256 4a803596617df025e2f5cc0e0cd9f75e678c268df00ee039dbb2af50f85f02f1`).
+  Verificat live: `OPTIONS` → `204` + `access-control-allow-origin: *`; `200` cu
+  `versiune: "v1"`, `raspuns` real, `motor: "intern_determinist"` și `apeluri_llm_externe: 0`;
+  `400` cu `prompt_too_long`; `400` cu `prompt_missing`; `405` cu `method_not_allowed`;
+  `401` cu `invalid_key`; `Authorization: Bearer` ignorat, adică `200`, conform §2.
 - **Cum verifici singur, fără să ne crezi:** `node verify.mjs` (în acest repository).
-  Rulează aceleași verificări și tipărește PASS/FAIL pentru fiecare.
-- **Rezultatul rulării din 2026-11-03: 3/8 PASS.** Trec: `OPTIONS` + CORS, răspunsul `200`
-  cu câmpurile de bază, comportamentul documentat al `Authorization` (ignorat). Pică exact
-  cele cinci verificări care depind de buildul nedepoloyat: `versiune`, `prompt_too_long`,
-  `prompt_missing`, `method_not_allowed`, `invalid_key` — toate răspund corect ca HTTP, dar
-  fără `code`. După deploy, rularea trebuie să iasă 8/8. Dacă nu iese, documentul acesta
-  minte și trebuie corectat, nu explicat.
+  Rulează aceleași verificări și tipărește PASS/FAIL pentru fiecare. Dacă îl rulezi mai
+  târziu și pică, înseamnă că producția s-a schimbat față de acest document — crede
+  rularea, nu textul.
 
 ## 1. Endpoint-ul și pagina — două lucruri diferite
 
@@ -84,7 +78,7 @@ Câmpurile de mai jos sunt contractul minim pe care te poți baza în `v1`:
 | `status` | `"cunoastere_interna"` \| `"cunostinte_insuficiente"` | acoperire internă, sau declararea onestă a lipsei |
 | `metoda` | string | cum a fost compus răspunsul (extracție deterministă din ADN și registrul propriu) |
 | `surse` | string[] | de unde provine textul (`PSIE_ADN`, nume de organe) |
-| `versiune` | `"v1"` | versiunea contractului (după deploy; vezi §0) |
+| `versiune` | `"v1"` | versiunea contractului, prezentă în fiecare răspuns (verificat live) |
 | `motor` | `"intern_determinist"` | motorul; constant în `v1` |
 | `apeluri_llm_externe` | number | `0` — nicio platformă externă nu e chemată |
 | `liber` | boolean | `true` — fără login |
@@ -98,8 +92,9 @@ Cererea de cheie întoarce: `api_key`, `tip`, `endpoint`, `header`, `raspuns`, `
 
 ## 5. Erori — ce se întâmplă la fiecare cod
 
-Fiecare eroare are `error` (text pentru om) și, din versiunea cu contract, `code`
-(stabil, pentru cod). Ramificația în client se face pe `code`, niciodată pe text.
+Fiecare eroare are `error` (text pentru om), `code` (stabil, pentru cod) și `versiune`.
+Ramificația în client se face pe `code`, niciodată pe text. Toate codurile de mai jos sunt
+verificate live în producție (vezi §0).
 
 | HTTP | `code` | Ce s-a întâmplat | Ce faci |
 | --- | --- | --- | --- |
