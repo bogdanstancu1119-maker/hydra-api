@@ -13,24 +13,23 @@ Knowledge that is missing is declared as missing, never invented.
 
 ## Last verified
 
-**2026-11-03, 18:04 UTC**, directly against the live endpoint. Run `node verify.mjs` to
-reproduce it.
+**2026-11-03, 18:13 UTC**, directly against the live endpoint, on the published build.
+**9 of 9 contract checks pass.** Run `node verify.mjs` to reproduce it.
 
 | Check | Result |
 | --- | --- |
-| `POST {"prompt": "Ce este SDI in PSIE?"}` | `200`, real answer, `~1.7 s` |
+| `POST {"prompt": "…"}` | `200`, real answer, `versiune: "v1"`, `motor: "intern_determinist"`, `apeluri_llm_externe: 0` |
 | `access-control-allow-origin` | `*` |
 | `OPTIONS` | `204`, `POST, OPTIONS`, headers `Content-Type, X-Hydra-API-Key, Authorization` |
-| 700-character prompt | `400` (`prompt_too_long` once the pending build is deployed) |
-| `GET` | `405` |
+| 700-character prompt | `400`, `code: "prompt_too_long"` |
+| Body without `prompt` | `400`, `code: "prompt_missing"` |
+| `GET` | `405`, `code: "method_not_allowed"` |
+| Invalid key | `401`, `code: "invalid_key"` |
 | `Authorization: Bearer …` | ignored, answers `200` — use `X-Hydra-API-Key` |
 
-**Known mismatch, stated on purpose:** the build answering right now predates contract
-`v1`, so it returns `raspuns`, `status`, `metoda`, `surse` but **not** `code` and
-`versiune`. The `server/` source here is the saved version
-(`sha256 4a803596617df025e2f5cc0e0cd9f75e678c268df00ee039dbb2af50f85f02f1`) and goes
-live on the next deploy. Until then, branch on `status` / `error` text; after it, branch
-on `code`.
+The build answering is the contract `v1` build, the same source published in `server/`
+(`sha256 4a803596617df025e2f5cc0e0cd9f75e678c268df00ee039dbb2af50f85f02f1`). Branch on
+`code`, never on the `error` text.
 
 ## Repository layout
 
@@ -71,7 +70,7 @@ curl -X POST https://hidra-smart-core.base44.app/functions/hydraApiLiber \
 }
 ```
 
-An error looks like this (`code` arrives with the contract build; see Last verified):
+An error looks like this (verified live):
 
 ```json
 { "error": "Prompt maxim 600 caractere", "code": "prompt_too_long", "versiune": "v1" }
