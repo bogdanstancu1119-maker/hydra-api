@@ -31,13 +31,18 @@ Prima versiune publică cu contract scris și verificabil.
   se folosește `X-Hydra-API-Key`.
 - `server/README.md` publică hash-ul sursei și spune deschis dacă buildul live corespunde.
 
-### Verificat live (2026-11-03, 18:04 UTC)
-- `POST` cu prompt scurt → `200`, `~1.7 s`, CORS `*`.
-- `OPTIONS` → `204`, `POST, OPTIONS`.
-- Prompt de 700 de caractere → `400`.
-- `GET` → `405`.
+### Verificat live (2026-11-03, 18:13 UTC, pe buildul publicat)
+- **9/9 puncte ale contractului trec** pe endpoint-ul public.
+- `OPTIONS` → `204` cu `access-control-allow-origin: *`.
+- `POST` cu prompt scurt → `200`, `versiune: "v1"`, `raspuns` real,
+  `motor: "intern_determinist"`, `apeluri_llm_externe: 0`.
+- Prompt de 700 caractere → `400` cu `code: "prompt_too_long"`.
+- Body fără `prompt` → `400` cu `code: "prompt_missing"`.
+- `GET` → `405` cu `code: "method_not_allowed"`.
+- Cheie invalidă → `401` cu `code: "invalid_key"`.
+- `Authorization: Bearer …` → `200` (antet ignorat, conform §2).
 
-### Rămas deschis
-- Buildul care răspunde acum este dinaintea contractului: `code` și `versiune` lipsesc
-  până la deploy-ul versiunii salvate. Nu se ascunde; se notează în `CONTRACT.md` §0 și
-  `README.md` §Last verified.
+### Închis
+- Deploy-ul versiunii salvate s-a făcut: buildul care răspunde este versiunea contractului
+  v1, deci `code` și `versiune` sunt live. Nota despre neatualizare din `CONTRACT.md` §0 și
+  `README.md` a fost eliminată, nu păstrată ca scu­ză.
