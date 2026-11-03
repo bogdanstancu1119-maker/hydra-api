@@ -20,8 +20,8 @@ lăsate vizibile intenționat: se vede exact ce lipsește, nu se sugerează un a
 ## Ce build este acesta
 
 - `entry.ts` publicat aici: `sha256 4a803596617df025e2f5cc0e0cd9f75e678c268df00ee039dbb2af50f85f02f1`
-- Acesta este **versiunea salvată** a porții (contract v1). Producția o preia la următorul
-  deploy; până atunci buildul live nu întoarce `code` și `versiune`.
+- Acesta este codul care **rulează acum în producție** (contract v1), verificat pe endpoint
+  la 2026-11-03, 18:13 UTC: `code` și `versiune` sunt prezente în fiecare răspuns.
 - Dovada se obține rulând `node verify.mjs` din rădăcina repository-ului: scriptul spune
   PASS/FAIL pentru fiecare punct al contractului, direct pe endpoint.
 
