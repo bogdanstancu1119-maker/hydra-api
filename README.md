@@ -14,11 +14,16 @@ Knowledge that is missing is declared as missing, never invented.
 ## Repository layout
 
 ```
+CONTRACT.md              what is guaranteed, and what is still missing
 examples/                curl, Node, Python — copy, run, done
 sdk/hydra-client.mjs     JS client, no dependencies (Node 18+ / browser)
 sdk/hydra_client.py      Python client (requests)
 server/                  the real server source behind the endpoint
 ```
+
+**Read [`CONTRACT.md`](CONTRACT.md) before you build on this.** It states the response
+fields you may rely on, the stable error codes, how keys behave, what happens to your
+prompt after the reply, and the five gaps still open.
 
 ## 1. Call it (no key)
 
@@ -32,6 +37,10 @@ curl -X POST https://hidra-smart-core.base44.app/functions/hydraApiLiber \
 {
   "prompt": "Ce este SDI în PSIE?",
   "raspuns": "…",
+  "status": "cunoastere_interna",
+  "metoda": "extracție deterministă din ADN și registrul propriu; nu execută organele enumerate",
+  "surse": ["PSIE_ADN"],
+  "versiune": "v1",
   "motor": "intern_determinist",
   "apeluri_llm_externe": 0,
   "liber": true,
@@ -61,14 +70,18 @@ and grants no administrative access.
 
 ## Status codes
 
-| Status | Meaning |
-| --- | --- |
-| `200` | Served. |
-| `400` | Missing `prompt`, or longer than 600 characters. |
-| `401` | A key was sent and it is not a valid Hydra key. Omit the header if unsure. |
-| `405` | Method other than `POST` (or `OPTIONS`). |
-| `409` | The text entered internal quarantine — its signature was retained as an antibody. |
-| `500` | Internal error. |
+Every error carries a stable `code` next to the human-readable `error`. Branch on the
+code, never on the text.
+
+| Status | `code` | Meaning |
+| --- | --- | --- |
+| `200` | — | Served. |
+| `400` | `prompt_missing` | Missing `prompt`. |
+| `400` | `prompt_too_long` | Longer than 600 characters. |
+| `401` | `invalid_key` | A key was sent and it is not a valid Hydra key. Omit the header if unsure. |
+| `405` | `method_not_allowed` | Method other than `POST` (or `OPTIONS`). |
+| `409` | `quarantine` | The text entered internal quarantine — its signature was retained as an antibody (`ordine` carries the reason). |
+| `500` | `internal_error` | Internal error. |
 
 ## 3. Client SDK
 
