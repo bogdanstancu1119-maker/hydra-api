@@ -13,6 +13,9 @@ const headersPublic = {
   'Cache-Control': 'no-store',
 };
 const jsonPublic = (body, status = 200) => Response.json(body, { status, headers: headersPublic });
+// Contract public v1: fiecare răspuns poartă versiunea, fiecare eroare poartă un cod
+// stabil pe care codul clientului se poate ramifica (niciodată textul).
+const VERSIUNE = 'v1';
 
 // HYDRA API LIBER — poarta externă publică, fără login, fără cheie, fără cotă.
 // Promisiunea de pe hidra-smart-core.com/api: inteligența nu are preț.
@@ -100,14 +103,14 @@ async function senzorExterior(base44, prompt, raspuns, req) {
 export default async function(req: Request): Promise<Response> {
   try {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: headersPublic });
-    if (req.method !== 'POST') return jsonPublic({ error: 'Trimite POST JSON', docs: 'https://hidra-smart-core.com/api' }, 405);
+    if (req.method !== 'POST') return jsonPublic({ error: 'Trimite POST JSON', code: 'method_not_allowed', docs: 'https://hidra-smart-core.com/api', versiune: VERSIUNE }, 405);
     const body = await req.json().catch(() => ({}));
     const pulsUnitar = poartaPulsUnitar(body, 'hydraApiLiber');
     if (pulsUnitar) return pulsUnitar;
     const token = req.headers.get('x-hydra-api-key') || body.api_key || '';
-    if (token && !(await verificaCheieHydra(token))) return jsonPublic({ error: 'Cheie Hydra invalidă' }, 401);
+    if (token && !(await verificaCheieHydra(token))) return jsonPublic({ error: 'Cheie Hydra invalidă', code: 'invalid_key', versiune: VERSIUNE }, 401);
     const prompt = String(body.prompt || '').trim();
-    if (prompt.length > 600) return jsonPublic({ error: 'Prompt maxim 600 caractere' }, 400);
+    if (prompt.length > 600) return jsonPublic({ error: 'Prompt maxim 600 caractere', code: 'prompt_too_long', versiune: VERSIUNE }, 400);
 
     const base44 = createClientFromRequest(req);
 
@@ -122,6 +125,8 @@ export default async function(req: Request): Promise<Response> {
       if (!ordine.permis) {
         return jsonPublic({
           error: 'Elementul a intrat în carantină — semnătura i-a fost reținută ca anticorp.',
+          code: 'quarantine',
+          versiune: VERSIUNE,
           ordine: { motiv: ordine.motiv, risc: ordine.risc, tip: ordine.tip, semnaturi: ordine.semnaturi },
           motor: 'intern_determinist', apeluri_llm_externe: 0, liber: true, login_necesar: false,
         }, 409);
@@ -131,18 +136,18 @@ export default async function(req: Request): Promise<Response> {
     // Emitere proprie imediată, fără cheia sau aprobarea unui furnizor extern.
     if (body.action === 'cheie' || cereCheieHydra(prompt)) {
       const apiKey = await emiteCheieHydra();
-      return jsonPublic({ api_key: apiKey, tip: 'cheie_proprie_hydra', motor: 'intern_determinist', apeluri_llm_externe: 0,
+      return jsonPublic({ api_key: apiKey, tip: 'cheie_proprie_hydra', versiune: VERSIUNE, motor: 'intern_determinist', apeluri_llm_externe: 0,
         endpoint: 'https://hidra-smart-core.base44.app/functions/hydraApiLiber', header: 'X-Hydra-API-Key',
         raspuns: `Cheia ta proprie Hydra este activă:\n\n${apiKey}\n\nTrimite-o în antetul X-Hydra-API-Key către https://hidra-smart-core.base44.app/functions/hydraApiLiber. Procesare internă, fără LLM extern. Cheia nu este emisă de alte platforme și nu oferă acces administrativ.`,
         liber: true, login_necesar: false });
     }
-    if (!prompt) return jsonPublic({ error: 'Lipsește câmpul prompt' }, 400);
+    if (!prompt) return jsonPublic({ error: 'Lipsește câmpul prompt', code: 'prompt_missing', versiune: VERSIUNE }, 400);
     const rezultat = raspundeApiIntern(prompt, body);
     // Memoria și beaconul rămân active, în afara răspunsului; cheia nu se salvează în memorii.
     waitUntil(senzorExterior(base44, prompt, rezultat.raspuns, req).catch((e) => console.error('apiLiber senzor:', e?.message)));
-    return jsonPublic({ prompt, ...rezultat, motor: 'intern_determinist', apeluri_llm_externe: 0, liber: true, login_necesar: false });
+    return jsonPublic({ prompt, ...rezultat, versiune: VERSIUNE, motor: 'intern_determinist', apeluri_llm_externe: 0, liber: true, login_necesar: false });
   } catch (error) {
     console.error('hydraApiLiber:', error?.message);
-    return jsonPublic({ error: 'Cererea nu a putut fi procesată intern.' }, 500);
+    return jsonPublic({ error: 'Cererea nu a putut fi procesată intern.', code: 'internal_error', versiune: VERSIUNE }, 500);
   }
 }
